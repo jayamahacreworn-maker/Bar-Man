@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Drink Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBBKNBryTWL6tXuXrGApXp6rGBerF8-8io",
+            authDomain: "dula-b1ce6.firebaseapp.com",
+            projectId: "dula-b1ce6",
+            storageBucket: "dula-b1ce6.firebasestorage.app",
+            messagingSenderId: "108343199273",
+            appId: "1:108343199273:web:fa3633c848cfd2e05abe38",
+            measurementId: "G-P3T27PMK6D"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const imgBBKey = "3fe60dc815cc3b75737f9878c57524d8";
+
+        // --- 1. Update Logo Logic ---
+        const logoForm = document.getElementById('logo-form');
+        logoForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = e.target.querySelector('button');
+            btn.innerText = "UPLOADING...";
+            const file = document.getElementById('logo-image').files[0];
+            const formData = new FormData();
+            formData.append("image", file);
+
+            try {
+                const imgRes = await fetch(`https://api.imgbb.com/1/upload?key=${imgBBKey}`, { method: 'POST', body: formData });
+                const imgData = await imgRes.json();
+                await setDoc(doc(db, "settings", "general"), { logo: imgData.data.url }, { merge: true });
+                alert("Logo Updated Successfully!");
+            } catch (err) { alert("Error: " + err.message); }
+            finally { btn.innerText = "UPDATE LOGO"; }
+        });
+
+        // --- 1.2 Update Background Logic (Fixed using ImgBB) ---
+        const bgForm = document.getElementById('bg-form');
+        bgForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = e.target.querySelector('button');
+            const file = document.getElementById('bg-image').files[0];
+            if (!file) return;
+
+            btn.innerText = "UPLOADING...";
+            const formData = new FormData();
+            formData.append("image", file);
+
+            try {
+                // ImgBB එකට upload කරලා link එක ගන්නවා (Resource Exhausted error එක එන්නේ නැහැ)
+                const imgRes = await fetch(`https://api.imgbb.com/1/upload?key=${imgBBKey}`, { method: 'POST', body: formData });
+                const imgData = await imgRes.json();
+                
+                // Firestore එකට save කරන්නේ link එක විතරයි
+                await setDoc(doc(db, "settings", "background"), { url: imgData.data.url });
+                alert("Background Updated Successfully!");
+            } catch (err) { 
+                alert("Error: " + err.message); 
+            } finally { 
+                btn.innerText = "UPDATE BACKGROUND"; 
+            }
+        });
+
+        // --- 2. Drinks Management Logic ---
+        const addForm = document.getElementById('add-form');
+        const list = document.getElementById('admin-list');
+
+        addForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = e.target.querySelector('button');
+            btn.disabled = true; btn.innerText = "UPLOADING...";
+            const file = document.getElementById('item-image').files[0];
+            const formData = new FormData();
+            formData.append("image", file);
+
+            try {
+                const imgRes = await fetch(`https://api.imgbb.com/1/upload?key=${imgBBKey}`, { method: 'POST', body: formData });
+                const imgData = await imgRes.json();
+                await addDoc(collection(db, "cocktails"), {
+                    name: document.getElementById('item-name').value,
+                    desc: document.getElementById('item-desc').value,
+                    category: document.getElementById('item-category').value,
+                    image: imgData.data.url
+                });
+                addForm.reset();
+                alert("Drink Added Successfully!");
+            } catch (err) { alert("Error: " + err.message); }
+            finally { btn.disabled = false; btn.innerText = "ADD TO MENU"; }
+        });
+
+        onSnapshot(collection(db, "cocktails"), (snap) => {
+            list.innerHTML = '';
+            snap.forEach(d => {
+                const item = d.data();
+                list.innerHTML += `
+                    <div class="flex items-center justify-between bg-zinc-900 p-3 rounded mb-2 border border-zinc-800">
+                        <div class="flex items-center gap-3">
+                            <img src="${item.image}" class="w-10 h-10 object-cover rounded">
+                            <p class="font-bold text-white text-xs uppercase">${item.name}</p>
+                        </div>
+                        <button onclick="deleteCocktail('${d.id}')" class="text-[9px] text-red-500 border border-red-500/30 px-3 py-1">REMOVE</button>
+                    </div>`;
+            });
+        });
+
+        window.deleteCocktail = async (id) => { if(confirm("Are you sure?")) await deleteDoc(doc(db, "cocktails", id)); };
+    </script>
+</head>
+<body class="bg-black text-zinc-400 p-6 font-mono">
+    <div class="max-w-xl mx-auto">
+        
+        <h2 class="text-white text-sm mb-4 border-l-2 border-yellow-500 pl-2 uppercase font-bold tracking-widest">1. Site Logo Management</h2>
+        <form id="logo-form" class="bg-zinc-950 p-6 rounded border border-zinc-900 mb-10 space-y-4">
+            <input type="file" id="logo-image" class="text-xs p-2 w-full border border-zinc-800" required>
+            <button type="submit" class="w-full bg-zinc-800 text-white py-2 text-xs font-bold hover:bg-zinc-700 uppercase tracking-widest">UPDATE LOGO</button>
+        </form>
+
+        <h2 class="text-white text-sm mb-4 border-l-2 border-yellow-500 pl-2 uppercase font-bold tracking-widest">1.2 Update Background Image</h2>
+        <form id="bg-form" class="bg-zinc-950 p-6 rounded border border-zinc-900 mb-10 space-y-4">
+            <input type="file" id="bg-image" class="text-xs p-2 w-full border border-zinc-800 text-white" required>
+            <button type="submit" class="w-full bg-zinc-800 text-white py-2 text-xs font-bold hover:bg-zinc-700 uppercase tracking-widest">UPDATE BACKGROUND</button>
+        </form>
+
+        <h2 class="text-white text-sm mb-4 border-l-2 border-yellow-500 pl-2 uppercase font-bold tracking-widest">2. Add New Drink</h2>
+        <form id="add-form" class="space-y-4 mb-12 bg-zinc-950 p-6 rounded border border-zinc-900">
+            <input type="text" id="item-name" placeholder="DRINK NAME" class="w-full bg-zinc-900 border border-zinc-800 p-3 outline-none text-white text-sm" required>
+            <select id="item-category" class="w-full bg-zinc-900 border border-zinc-800 p-3 outline-none text-white text-sm">
+                <option value="Cocktail">Cocktail</option>
+                <option value="Mocktail">Mocktail</option>
+            </select>
+            <textarea id="item-desc" placeholder="INGREDIENTS" class="w-full bg-zinc-900 border border-zinc-800 p-3 outline-none text-white text-sm"></textarea>
+            <input type="file" id="item-image" class="text-xs p-2 w-full border border-zinc-800" required>
+            <button type="submit" class="w-full bg-white text-black py-3 font-bold hover:bg-yellow-500 uppercase tracking-widest">ADD TO MENU</button>
+        </form>
+
+        <h2 class="text-xs font-bold mb-4 text-zinc-600 tracking-widest uppercase">Live Drinks</h2>
+        <div id="admin-list"></div>
+    </div>
+</body>
+</html>
